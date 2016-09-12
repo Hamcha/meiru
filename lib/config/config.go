@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"io/ioutil"
 	"strings"
 )
 
@@ -50,8 +51,20 @@ var (
 	ErrQDifferentFormat = errors.New("query cfg error: format mismatch")
 )
 
-func LoadConfig() (Config, error) {
-	return Config{}, nil
+func LoadConfig(path string) (Config, error) {
+	var cfg Config
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return cfg, err
+	}
+
+	lines := strings.Split("\n", string(data))
+	scope := []*Block{cfg.Data}
+	scopeIndex := 0
+	for _, line := range lines {
+		// TODO
+	}
 }
 
 func (cfg Config) Query(path string) (QueryResult, error) {
