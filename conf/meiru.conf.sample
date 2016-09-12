@@ -1,0 +1,6 @@
+bind localhost
+
+default:
+	box /mail/$user
+
+@include users.conf
