@@ -45,8 +45,6 @@ type QueryResult struct {
 }
 
 var (
-	ErrLCannotReadFile  = errors.New("load cfg error: cannot read file")
-	ErrLIncludeFailed   = errors.New("load cfg error: cannot include file")
 	ErrQNotFound        = errors.New("query cfg error: property not found")
 	ErrQDifferentFormat = errors.New("query cfg error: format mismatch")
 )
