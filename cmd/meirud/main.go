@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 
 	"github.com/hamcha/meiru/lib/config"
@@ -22,4 +23,7 @@ func main() {
 	var err error
 	conf, err = config.LoadConfig(*cfgpath)
 	assert(err)
+
+	props := conf.Query("user password")
+	fmt.Println(props)
 }

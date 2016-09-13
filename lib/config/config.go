@@ -33,17 +33,15 @@ type Config struct {
 	Data Block
 }
 
-type Block map[string]Property
+type Block []Property
 
 type Property struct {
+	Key    string
 	Values []string
 	Block  Block
 }
 
-type QueryResult struct {
-	Single   string
-	Property *Property
-}
+type QueryResult []Property
 
 var (
 	ErrPIndentMismatch  = errors.New("cfg parse error: indent mismatch")
@@ -53,9 +51,7 @@ var (
 )
 
 func LoadConfig(path string) (Config, error) {
-	cfg := Config{
-		Data: make(Block),
-	}
+	cfg := Config{}
 
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
@@ -141,11 +137,10 @@ func LoadConfig(path string) (Config, error) {
 			leftIndex = rightIndex
 		}
 
-		// Get key (first atom)
-		key := atoms[0]
-
 		// Create property
-		property := Property{}
+		property := Property{
+			Key: atoms[0], // Key is first atom
+		}
 
 		// If we have values, add them
 		if len(atoms) > 0 {
@@ -154,30 +149,41 @@ func LoadConfig(path string) (Config, error) {
 
 		// If we are a block, create it and add it to the scope
 		if isBlock {
-			property.Block = make(Block)
 			scope = append(scope, property.Block)
 		}
 
 		// Add property to current scope
-		scope[indent][key] = property
+		scope[indent] = append(scope[indent], property)
 	}
 
 	return cfg, nil
 }
 
-func (cfg Config) Query(path string) (QueryResult, error) {
-	/*
-		parts := strings.Split(path, " ")
+func queryPath(path []string, block Block) []Property {
+	var found []Property
 
-		curNode := cfg.Data
-		for _, v := range parts {
-
+	if len(path) == 1 {
+		// Already at leaf nodes, only fetch matching
+		for _, property := range block {
+			if property.Key == path[0] {
+				found = append(found, property)
+			}
 		}
-	*/
-	return QueryResult{}, ErrQNotFound
+	} else {
+		// Root or middle nodes, recurse to matching leaves
+		for pathIndex, pathName := range path {
+			for _, property := range block {
+				if property.Key == pathName && property.Block != nil {
+					found = append(found, queryPath(path[pathIndex+1:], property.Block)...)
+				}
+			}
+		}
+	}
+
+	return found
 }
 
-func (cfg Config) QuerySingle(path string) (string, error) {
-	_, err := cfg.Query(path)
-	return "", err
+func (cfg Config) Query(path string) QueryResult {
+	parts := strings.Split(path, " ")
+	return queryPath(parts, cfg.Data)
 }
