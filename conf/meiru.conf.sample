@@ -1,6 +1,6 @@
 bind localhost
 
 default:
-	box /mail/$user
+	box /mail/$domain/$user
 
-@include users.conf.sample
+@include localhost.conf.sample

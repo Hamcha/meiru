@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"log"
+	"os"
 
 	"github.com/hamcha/meiru/lib/config"
 )
@@ -17,9 +18,15 @@ func assert(err error) {
 
 func main() {
 	cfgpath := flag.String("config", "conf/meiru.conf", "Path to configuration file")
+	dump := flag.Bool("dump-cfg", false, "Dump parsed configuration and exit")
 	flag.Parse()
 
 	var err error
 	conf, err = config.LoadConfig(*cfgpath)
 	assert(err)
+
+	if *dump {
+		conf.Dump(os.Stderr)
+		return
+	}
 }

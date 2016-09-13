@@ -107,8 +107,7 @@ func parseConfig(configfile string) (Block, error) {
 		// If we are a block, create it and add it to the scope
 		if isBlock {
 			index := len(*scope[indent]) - 1
-			current := (*scope[indent])[index]
-			scope = append(scope, &current.Block)
+			scope = append(scope, &(*scope[indent])[index].Block)
 		}
 	}
 
