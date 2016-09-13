@@ -3,4 +3,4 @@ bind localhost
 default:
 	box /mail/$user
 
-@include users.conf
+@include users.conf.sample

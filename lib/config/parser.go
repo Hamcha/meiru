@@ -11,9 +11,10 @@ var (
 	ParseErrorUnmatchedQuote = errors.New("cfg parse error: missing ending quote")
 )
 
-func parseConfig(configfile string, block Block) error {
+func parseConfig(configfile string) (Block, error) {
+	var block Block
 	lines := strings.Split(configfile, "\n")
-	scope := []Block{block}
+	scope := []*Block{&block}
 	for _, line := range lines {
 		// Remove comments (find # without preceding \)
 		linecopy := line
@@ -55,7 +56,7 @@ func parseConfig(configfile string, block Block) error {
 
 		// Check for indent mismatch
 		if indent >= len(scope) {
-			return ParseErrorIndentMismatch
+			return block, ParseErrorIndentMismatch
 		}
 
 		// To avoid scope issues, pop unused scope levels
@@ -74,41 +75,42 @@ func parseConfig(configfile string, block Block) error {
 				continue
 			}
 
-			rightIndex := leftIndex + 1
-			currentAtom := parts[leftIndex]
+			rightIndex := leftIndex
 			for ; ; rightIndex++ {
 				if rightIndex >= len(parts) {
-					return ParseErrorUnmatchedQuote
+					return block, ParseErrorUnmatchedQuote
 				}
-				currentAtom += " " + parts[rightIndex]
 				if parts[rightIndex][len(parts[rightIndex])-1] == '"' {
 					break
 				}
 			}
 
-			currentAtom = strings.Trim(currentAtom, "\"")
-			atoms = append(atoms, currentAtom)
+			fullAtom := strings.Trim(strings.Join(parts[leftIndex:rightIndex+1], " "), "\"")
+			atoms = append(atoms, fullAtom)
 			leftIndex = rightIndex
 		}
 
-		// Create property
-		property := Property{
-			Key: atoms[0], // Key is first atom
-		}
+		key := atoms[0]
 
 		// If we have values, add them
+		var values []string
 		if len(atoms) > 0 {
-			property.Values = atoms[1:]
-		}
-
-		// If we are a block, create it and add it to the scope
-		if isBlock {
-			scope = append(scope, property.Block)
+			values = atoms[1:]
 		}
 
 		// Add property to current scope
-		scope[indent] = append(scope[indent], property)
+		*scope[indent] = append(*scope[indent], Property{
+			Key:    key,
+			Values: values,
+		})
+
+		// If we are a block, create it and add it to the scope
+		if isBlock {
+			index := len(*scope[indent]) - 1
+			current := (*scope[indent])[index]
+			scope = append(scope, &current.Block)
+		}
 	}
 
-	return nil
+	return block, nil
 }
