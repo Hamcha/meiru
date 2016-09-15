@@ -41,10 +41,15 @@ func NewClient(host string) (*Client, error) {
 
 	reader := bufio.NewReader(sock)
 
-	return &Client{
+	client := Client{
 		conn:   sock,
 		reader: reader,
-	}, nil
+	}
+
+	// Wait for greeting
+	_, err = client.getReplies()
+
+	return &client, err
 }
 
 func (c *Client) Close() {
@@ -60,17 +65,15 @@ func (c *Client) Greet(host string) error {
 		return err
 	}
 
-	// No response received?
-	if len(resp) == 0 {
-		return ClientErrNoServerResponse
-	}
-
 	// Check if the greet was not successful
 	if resp[0].Code != 250 {
 		// Fall back to HELO
 		c.cmd("HELO %s", host)
 		resp, err = c.getReplies()
 		if err != nil {
+			return err
+		}
+		if err = getResponseError(resp[0]); err != nil {
 			return err
 		}
 	}
@@ -88,6 +91,53 @@ func (c *Client) Greet(host string) error {
 		}
 	}
 
+	return nil
+}
+
+func (c *Client) SetSender(addr string) error {
+	c.cmd("MAIL FROM: <%s>", addr)
+	resp, err := c.getReplies()
+	if err != nil {
+		return err
+	}
+
+	return getResponseError(resp[0])
+}
+
+func (c *Client) AddRecipient(addr string) error {
+	c.cmd("RCPT TO: <%s>", addr)
+	resp, err := c.getReplies()
+	if err != nil {
+		return err
+	}
+
+	return getResponseError(resp[0])
+}
+
+func (c *Client) SendData(data string) error {
+	c.cmd("DATA")
+	resp, err := c.getReplies()
+	if err != nil {
+		return err
+	}
+
+	if resp[0].Code != 354 {
+		return errors.New("smtp client server error: " + strconv.Itoa(resp[0].Code) + " - " + resp[0].Text)
+	}
+
+	fmt.Fprintf(c.conn, "%s\r\n.\r\n", data)
+	resp, err = c.getReplies()
+	if err != nil {
+		return err
+	}
+
+	return getResponseError(resp[0])
+}
+
+func getResponseError(reply ClientServerReply) error {
+	if reply.Code != 250 {
+		return errors.New("smtp client server error: " + strconv.Itoa(reply.Code) + " - " + reply.Text)
+	}
 	return nil
 }
 
@@ -134,6 +184,11 @@ func (c *Client) getReplies() ([]ClientServerReply, error) {
 			Code: code,
 			Text: str[separatorIndex+1:],
 		})
+	}
+
+	// No response received?
+	if len(replies) == 0 {
+		return replies, ClientErrNoServerResponse
 	}
 
 	return replies, nil
