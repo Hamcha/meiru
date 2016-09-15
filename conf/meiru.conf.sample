@@ -1,6 +1,15 @@
 bind localhost
 
+dbfile /mail/meiru.db
+
 default:
 	box /mail/$domain/$user
 
-@include localhost.conf.sample
+domain localhost:
+	user test:
+		password plain "test"
+
+	user admin:
+		password sha256 8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918
+
+	catch-all admin
