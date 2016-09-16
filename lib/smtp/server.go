@@ -22,9 +22,16 @@ type Server struct {
 	MaxSize  uint64
 }
 
+type serverTransaction struct {
+	Sender     string
+	Recipients []string
+	Data       []byte
+}
+
 type serverClient struct {
-	socket net.Conn
-	server *Server
+	socket             net.Conn
+	server             *Server
+	currentTransaction serverTransaction
 
 	// Client info
 	Hostname string
@@ -99,6 +106,7 @@ func (c *serverClient) Greet() {
 func (c *serverClient) DoCommand(line string) bool {
 	cmd := strings.ToUpper(line)
 	switch {
+	// HELO: SMTP HELO (required greeting)
 	case strings.HasPrefix(cmd, "HELO"):
 		// Check for hostname
 		hostname := ""
@@ -115,6 +123,8 @@ func (c *serverClient) DoCommand(line string) bool {
 		// Reply with my hostname
 		hello := fmt.Sprintf("%s Hello! 😊", c.server.Hostname)
 		c.reply(250, hello)
+
+	// ELHO: ESMTP HELO (w/ extension list)
 	case strings.HasPrefix(cmd, "EHLO"):
 		// Check for hostname
 		hostname := ""
@@ -133,9 +143,22 @@ func (c *serverClient) DoCommand(line string) bool {
 		hello := fmt.Sprintf("%s Hello %s [%s]! 😊", c.server.Hostname, c.Hostname, clientHost)
 		maxsize := fmt.Sprintf("SIZE %d", c.server.MaxSize)
 		c.replyMulti(250, []string{hello, "PIPELINING", maxsize})
+
+	// NOOP
+	case strings.HasPrefix(cmd, "NOOP"):
+		c.reply(250, "OK 👍")
+
+	// QUIT: Close current connection with client
 	case strings.HasPrefix(cmd, "QUIT"):
 		c.reply(221, "Have a nice day! 🎉")
 		return false
+
+	// RSET: Reset current transaction (start from scratch)
+	case strings.HasPrefix(cmd, "RSET"):
+		c.currentTransaction = serverTransaction{}
+		c.reply(250, "All is forgotten")
+
+	// Command not recognized
 	default:
 		c.reply(502, "Command not recognized 😕")
 	}
@@ -176,18 +199,20 @@ func (c *serverClient) readLine(reader *bufio.Reader) (string, error) {
 			err = ServerErrExceededMaximumSize
 			break
 		}
-		if len(curline) > 1 && curline[len(curline)-2] == '\r' {
+		if strings.HasSuffix(curline, "\r\n") {
 			break
 		} else {
-			chr, err := reader.ReadByte()
-			if err != nil || chr == '\r' {
+			var chr byte
+			chr, err = reader.ReadByte()
+			if err != nil {
 				break
 			}
 			line += string(chr)
+			if strings.HasSuffix(line, "\n\r") {
+				break
+			}
 		}
 	}
-	if len(line) > 1 {
-		line = line[0 : len(line)-2]
-	}
-	return line, err
+
+	return strings.TrimRight(line, "\r\n"), err
 }
