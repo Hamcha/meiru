@@ -1,4 +1,6 @@
-bind localhost
+hostname localhost
+
+bind localhost:26
 
 dbfile /mail/meiru.db
 

@@ -15,7 +15,7 @@ type Client struct {
 	ServerExt []ClientServerExt
 }
 
-type ClientServerReply struct {
+type clientServerReply struct {
 	Code int
 	Text string
 }
@@ -134,7 +134,7 @@ func (c *Client) SendData(data string) error {
 	return getResponseError(resp[0])
 }
 
-func getResponseError(reply ClientServerReply) error {
+func getResponseError(reply clientServerReply) error {
 	if reply.Code != 250 {
 		return errors.New("smtp client server error: " + strconv.Itoa(reply.Code) + " - " + reply.Text)
 	}
@@ -145,8 +145,8 @@ func (c *Client) cmd(format string, a ...interface{}) {
 	fmt.Fprintf(c.conn, format+"\r\n", a...)
 }
 
-func (c *Client) getReplies() ([]ClientServerReply, error) {
-	var replies []ClientServerReply
+func (c *Client) getReplies() ([]clientServerReply, error) {
+	var replies []clientServerReply
 	var hasMore = true
 
 	for hasMore {
@@ -180,7 +180,7 @@ func (c *Client) getReplies() ([]ClientServerReply, error) {
 			return replies, ClientErrInvalidServerResponse
 		}
 
-		replies = append(replies, ClientServerReply{
+		replies = append(replies, clientServerReply{
 			Code: code,
 			Text: str[separatorIndex+1:],
 		})
