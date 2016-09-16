@@ -52,16 +52,31 @@ func main() {
 		return
 	}
 
+	// Get required configuration values for the SMTP server
+
 	hostname, err := conf.QuerySingle("hostname 0")
 	assertCfg(err, "hostname <my.host.name>")
 
 	bind, err := conf.QuerySingle("bind 0")
 	assertCfg(err, "bind <host/ip>[:port]")
 
+	// Create SMTP server and start listening
 	server, err := smtp.NewServer(bind, hostname)
 	assert(err)
 
+	// Check for custom max size
+	maxsize, err := conf.QuerySingle("max_size 0")
+	if err == nil {
+		maxsizeInt, err := parseByteSize(maxsize)
+		if err != nil {
+			log.Fatalf("The value of 'max_size' (%s) was not recognized as a valid size\r\n", maxsize)
+		} else {
+			server.MaxSize = maxsizeInt
+		}
+	}
+
 	log.Printf("[SMTPd] Listening on %s\r\n", bind)
 
+	// Start serving SMTP connections
 	assert(server.ListenAndServe())
 }

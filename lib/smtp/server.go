@@ -2,6 +2,7 @@ package smtp
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -9,9 +10,16 @@ import (
 	"strings"
 )
 
+var (
+	ServerErrExceededMaximumSize = errors.New("server err: Client exceeded data size limit")
+)
+
 type Server struct {
-	Hostname string
 	svsocket net.Listener
+
+	// Server info
+	Hostname string
+	MaxSize  uint64
 }
 
 type serverClient struct {
@@ -23,6 +31,7 @@ type serverClient struct {
 }
 
 const MeiruMOTD = "meiru-SMTPd - Welcome!"
+const DefaultMaxSize uint64 = 10485760 // 10 MiB
 
 func NewServer(bindAddr string, hostname string) (*Server, error) {
 	if strings.IndexRune(bindAddr, ':') < 0 {
@@ -32,8 +41,10 @@ func NewServer(bindAddr string, hostname string) (*Server, error) {
 	serversock, err := net.Listen("tcp", bindAddr)
 
 	return &Server{
-		svsocket: serversock,
 		Hostname: hostname,
+		MaxSize:  DefaultMaxSize,
+
+		svsocket: serversock,
 	}, err
 }
 
@@ -65,9 +76,9 @@ func (s *Server) handleClient(conn net.Conn) {
 
 	// Wait and listen for commands
 	reader := bufio.NewReader(conn)
-	isOpen = true
+	isOpen := true
 	for isOpen {
-		line, err := readLine(reader)
+		line, err := c.readLine(reader)
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("[SMTPd] Read error from client: %s\r\n", err.Error())
@@ -82,34 +93,48 @@ func (s *Server) handleClient(conn net.Conn) {
 }
 
 func (c *serverClient) Greet() {
-	fmt.Fprintf(c.socket, "220 %s SMTP %s\r\n", c.server.Hostname, MeiruMOTD)
+	fmt.Fprintf(c.socket, "220 %s ESMTP %s\r\n", c.server.Hostname, MeiruMOTD)
 }
 
-func (c *serverClient) DoCommand(line string) {
+func (c *serverClient) DoCommand(line string) bool {
 	cmd := strings.ToUpper(line)
 	switch {
 	case strings.HasPrefix(cmd, "HELO"):
 		// Check for hostname
 		hostname := ""
-		if len(cmd) > 5 {
-			hostname = strings.TrimSpace(cmd[5:])
+		if len(line) > 5 {
+			hostname = strings.TrimSpace(line[5:])
 		}
-
-		if len(hostname) > 0 {
-			c.Hostname = hostname
-
-			// Reply with my hostname
-			hello := fmt.Sprintf("%s Hello! 😊", c.server.Hostname)
-			c.reply(250, hello)
-		} else {
+		if len(hostname) < 1 {
 			// No hostname provided, scold the ruffian
 			c.reply(501, "No HELO hostname provided")
+			break
 		}
+		c.Hostname = hostname
+
+		// Reply with my hostname
+		hello := fmt.Sprintf("%s Hello! 😊", c.server.Hostname)
+		c.reply(250, hello)
 	case strings.HasPrefix(cmd, "EHLO"):
-		// Not currently supported
-		c.reply(502, "EHLO is not supported yet 😟")
+		// Check for hostname
+		hostname := ""
+		if len(line) > 5 {
+			hostname = strings.TrimSpace(line[5:])
+		}
+		if len(hostname) < 1 {
+			// No hostname provided, scold the ruffian
+			c.reply(501, "No EHLO hostname provided")
+			break
+		}
+		c.Hostname = hostname
+
+		// Reply with my hostname
+		clientHost, _, _ := net.SplitHostPort(c.socket.RemoteAddr().String())
+		hello := fmt.Sprintf("%s Hello %s [%s]! 😊", c.server.Hostname, c.Hostname, clientHost)
+		maxsize := fmt.Sprintf("SIZE %d", c.server.MaxSize)
+		c.replyMulti(250, []string{hello, "PIPELINING", maxsize})
 	case strings.HasPrefix(cmd, "QUIT"):
-		c.reply(221, "Have a nice day!")
+		c.reply(221, "Have a nice day! 🎉")
 		return false
 	default:
 		c.reply(502, "Command not recognized 😕")
@@ -136,7 +161,7 @@ func (c *serverClient) reply(code int, line string) {
 	fmt.Fprintf(c.socket, "%d %s\r\n", code, line)
 }
 
-func readLine(reader *bufio.Reader) (string, error) {
+func (c *serverClient) readLine(reader *bufio.Reader) (string, error) {
 	var err error
 	line := ""
 
@@ -147,6 +172,10 @@ func readLine(reader *bufio.Reader) (string, error) {
 			break
 		}
 		line += curline
+		if uint64(len(line)) > c.server.MaxSize {
+			err = ServerErrExceededMaximumSize
+			break
+		}
 		if len(curline) > 1 && curline[len(curline)-2] == '\r' {
 			break
 		} else {
