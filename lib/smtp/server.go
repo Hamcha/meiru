@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/mail"
 	"strings"
 )
 
@@ -22,16 +23,16 @@ type Server struct {
 	MaxSize  uint64
 }
 
-type serverTransaction struct {
+type serverEnvelope struct {
 	Sender     string
 	Recipients []string
 	Data       []byte
 }
 
 type serverClient struct {
-	socket             net.Conn
-	server             *Server
-	currentTransaction serverTransaction
+	socket          net.Conn
+	server          *Server
+	currentEnvelope serverEnvelope
 
 	// Client info
 	Hostname string
@@ -153,10 +154,69 @@ func (c *serverClient) DoCommand(line string) bool {
 		c.reply(221, "Have a nice day! 🎉")
 		return false
 
-	// RSET: Reset current transaction (start from scratch)
+	// RSET: Reset current envelope (start from scratch)
 	case strings.HasPrefix(cmd, "RSET"):
-		c.currentTransaction = serverTransaction{}
+		c.currentEnvelope = serverEnvelope{}
 		c.reply(250, "All is forgotten")
+
+	// MAIL FROM: Start a envelope and set sender
+	case strings.HasPrefix(cmd, "MAIL FROM:"):
+		// Reject if there is a envelope already active
+		if len(c.currentEnvelope.Sender) > 0 {
+			c.reply(503, "An envelope is already open, call RSET if you want to start over")
+		}
+		// Reject empty addresses
+		if len(line) < 11 {
+			c.reply(550, "No address specified")
+			break
+		}
+		// Trim whitespace around line and reject garbage
+		trimmed := strings.TrimSpace(line[10:])
+		if strings.IndexByte(trimmed, '>') > 0 && !strings.HasSuffix(trimmed, ">") {
+			c.reply(555, "Garbage not permitted")
+			break
+		}
+		// Try to parse address
+		addr, err := mail.ParseAddress(trimmed)
+		if err != nil {
+			c.reply(501, "Address is malformed")
+			break
+		}
+
+		// Set address as sender
+		c.currentEnvelope.Sender = addr.Address
+		c.reply(250, "OK 👍")
+
+	// RCPT TO: Add recipient to envelope
+	case strings.HasPrefix(cmd, "RCPT TO:"):
+		// Reject if there isn't an active envelope
+		if len(c.currentEnvelope.Sender) < 1 {
+			c.reply(503, "No envelopes to add recipients to, please start one with MAIL FROM")
+			break
+		}
+		// Reject empty addresses
+		if len(line) < 11 {
+			c.reply(550, "No address specified")
+			break
+		}
+		// Trim whitespace around line and reject garbage
+		trimmed := strings.TrimSpace(line[10:])
+		if strings.IndexByte(trimmed, '>') > 0 && !strings.HasSuffix(trimmed, ">") {
+			c.reply(555, "Garbage not permitted")
+			break
+		}
+		// Try to parse address
+		addr, err := mail.ParseAddress(trimmed)
+		if err != nil {
+			c.reply(501, "Address is malformed")
+			break
+		}
+
+		//TODO Ask for AUTH if outgoing email
+
+		// Add address to recipients
+		c.currentEnvelope.Recipients = append(c.currentEnvelope.Recipients, addr.Address)
+		c.reply(250, "OK 👍")
 
 	// Command not recognized
 	default:
