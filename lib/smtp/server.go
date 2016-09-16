@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/mail"
 	"strings"
+
+	"github.com/hamcha/meiru/lib/email"
 )
 
 var (
@@ -19,8 +21,9 @@ type Server struct {
 	svsocket net.Listener
 
 	// Server info
-	Hostname string
-	MaxSize  uint64
+	Hostname     string
+	MaxSize      uint64
+	LocalDomains []string
 }
 
 type serverEnvelope struct {
@@ -32,7 +35,10 @@ type serverEnvelope struct {
 type serverClient struct {
 	socket          net.Conn
 	server          *Server
+	reader          *bufio.Reader
 	currentEnvelope serverEnvelope
+	greeted         bool
+	authenticated   bool
 
 	// Client info
 	Hostname string
@@ -75,18 +81,20 @@ func (s *Server) Close() {
 
 func (s *Server) handleClient(conn net.Conn) {
 	c := serverClient{
-		socket: conn,
-		server: s,
+		socket:        conn,
+		server:        s,
+		greeted:       false,
+		authenticated: false,
 	}
 
 	// Send greeting
 	c.Greet()
 
 	// Wait and listen for commands
-	reader := bufio.NewReader(conn)
+	c.reader = bufio.NewReader(conn)
 	isOpen := true
 	for isOpen {
-		line, err := c.readLine(reader)
+		line, err := c.readLine()
 		if err != nil {
 			if err != io.EOF {
 				log.Printf("[SMTPd] Read error from client: %s\r\n", err.Error())
@@ -120,6 +128,7 @@ func (c *serverClient) DoCommand(line string) bool {
 			break
 		}
 		c.Hostname = hostname
+		c.greeted = true
 
 		// Reply with my hostname
 		hello := fmt.Sprintf("%s Hello! 😊", c.server.Hostname)
@@ -138,6 +147,7 @@ func (c *serverClient) DoCommand(line string) bool {
 			break
 		}
 		c.Hostname = hostname
+		c.greeted = true
 
 		// Reply with my hostname
 		clientHost, _, _ := net.SplitHostPort(c.socket.RemoteAddr().String())
@@ -161,9 +171,15 @@ func (c *serverClient) DoCommand(line string) bool {
 
 	// MAIL FROM: Start a envelope and set sender
 	case strings.HasPrefix(cmd, "MAIL FROM:"):
+		// Reject if we haven't been greeted already
+		if !c.greeted {
+			c.reply(503, "Rude! 😠 Say HELO/EHLO first!")
+			break
+		}
 		// Reject if there is a envelope already active
 		if len(c.currentEnvelope.Sender) > 0 {
 			c.reply(503, "An envelope is already open, call RSET if you want to start over")
+			break
 		}
 		// Reject empty addresses
 		if len(line) < 11 {
@@ -178,7 +194,7 @@ func (c *serverClient) DoCommand(line string) bool {
 		}
 		// Try to parse address
 		addr, err := mail.ParseAddress(trimmed)
-		if err != nil {
+		if err != nil || !email.IsValidAddress(addr.Address) {
 			c.reply(501, "Address is malformed")
 			break
 		}
@@ -207,7 +223,7 @@ func (c *serverClient) DoCommand(line string) bool {
 		}
 		// Try to parse address
 		addr, err := mail.ParseAddress(trimmed)
-		if err != nil {
+		if err != nil || !email.IsValidAddress(addr.Address) {
 			c.reply(501, "Address is malformed")
 			break
 		}
@@ -217,6 +233,21 @@ func (c *serverClient) DoCommand(line string) bool {
 		// Add address to recipients
 		c.currentEnvelope.Recipients = append(c.currentEnvelope.Recipients, addr.Address)
 		c.reply(250, "OK 👍")
+
+	// DATA: Receive mail data from client
+	case strings.HasPrefix(cmd, "DATA"):
+		// Reject if there isn't an active envelope
+		if len(c.currentEnvelope.Sender) < 1 {
+			c.reply(503, "No envelopes to add recipients to, please start one with MAIL FROM")
+			break
+		}
+		c.reply(354, "Fire away! End with <CRLF>.<CRLF>")
+		_, err := c.readDATA()
+		if err != nil {
+			log.Printf("[SMTPd] Client read error: %s\r\n", err.Error())
+			return false
+		}
+		c.reply(250, "Your message is on its way! ✈")
 
 	// Command not recognized
 	default:
@@ -244,13 +275,13 @@ func (c *serverClient) reply(code int, line string) {
 	fmt.Fprintf(c.socket, "%d %s\r\n", code, line)
 }
 
-func (c *serverClient) readLine(reader *bufio.Reader) (string, error) {
+func (c *serverClient) readLine() (string, error) {
 	var err error
 	line := ""
 
 	for {
 		var curline string
-		curline, err = reader.ReadString('\n')
+		curline, err = c.reader.ReadString('\n')
 		if err != nil {
 			break
 		}
@@ -263,7 +294,7 @@ func (c *serverClient) readLine(reader *bufio.Reader) (string, error) {
 			break
 		} else {
 			var chr byte
-			chr, err = reader.ReadByte()
+			chr, err = c.reader.ReadByte()
 			if err != nil {
 				break
 			}
@@ -275,4 +306,47 @@ func (c *serverClient) readLine(reader *bufio.Reader) (string, error) {
 	}
 
 	return strings.TrimRight(line, "\r\n"), err
+}
+
+func (c *serverClient) readDATA() (string, error) {
+	data := ""
+	checkNext := false
+	for {
+		line, err := c.readLine()
+		if err != nil {
+			return data, err
+		}
+
+		if len(line) < 1 && !checkNext {
+			checkNext = true
+		}
+		if checkNext && line == "." {
+			break
+		}
+		data += line + "\r\n"
+	}
+
+	return strings.TrimRight(data, "\r\n"), nil
+}
+
+func (c *serverClient) isAddressInternal(addr string) bool {
+	atIndex := strings.LastIndexByte(addr, '@')
+	remoteDomain := strings.ToLower(addr[atIndex+1:])
+	for _, localDomain := range c.server.LocalDomains {
+		if strings.ToLower(localDomain) == remoteDomain {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *serverClient) isEnvelopInternal(e *serverEnvelope) bool {
+	for _, recp := range e.Recipients {
+		if !c.isAddressInternal(recp) {
+			return false
+		}
+	}
+
+	return true
 }
