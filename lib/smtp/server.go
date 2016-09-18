@@ -152,8 +152,10 @@ func (c *serverClient) DoCommand(line string) bool {
 		// Reply with my hostname
 		clientHost, _, _ := net.SplitHostPort(c.socket.RemoteAddr().String())
 		hello := fmt.Sprintf("%s Hello %s [%s]! 😊", c.server.Hostname, c.Hostname, clientHost)
+
+		// Prepare extension list
 		maxsize := fmt.Sprintf("SIZE %d", c.server.MaxSize)
-		c.replyMulti(250, []string{hello, "PIPELINING", maxsize})
+		c.replyMulti(250, []string{hello, "PIPELINING", "SMTPUTF8", maxsize})
 
 	// NOOP
 	case strings.HasPrefix(cmd, "NOOP"):
@@ -188,14 +190,14 @@ func (c *serverClient) DoCommand(line string) bool {
 		}
 		// Trim whitespace around line and reject garbage
 		trimmed := strings.TrimSpace(line[10:])
-		if strings.IndexByte(trimmed, '>') > 0 && !strings.HasSuffix(trimmed, ">") {
+		if strings.IndexByte(trimmed, '>') < 0 {
 			c.reply(555, "Garbage not permitted")
 			break
 		}
 		// Try to parse address
 		addr, err := mail.ParseAddress(trimmed)
 		if err != nil || !email.IsValidAddress(addr.Address) {
-			c.reply(501, "Address is malformed")
+			c.reply(501, "The address you specified is malformed")
 			break
 		}
 
@@ -217,14 +219,14 @@ func (c *serverClient) DoCommand(line string) bool {
 		}
 		// Trim whitespace around line and reject garbage
 		trimmed := strings.TrimSpace(line[10:])
-		if strings.IndexByte(trimmed, '>') > 0 && !strings.HasSuffix(trimmed, ">") {
+		if strings.IndexByte(trimmed, '>') < 0 {
 			c.reply(555, "Garbage not permitted")
 			break
 		}
 		// Try to parse address
 		addr, err := mail.ParseAddress(trimmed)
 		if err != nil || !email.IsValidAddress(addr.Address) {
-			c.reply(501, "Address is malformed")
+			c.reply(501, "The address you specified is malformed")
 			break
 		}
 
