@@ -64,6 +64,15 @@ func main() {
 	server, err := smtp.NewServer(bind, hostname)
 	assert(err)
 
+	// Set configuration options to server options
+	setServerConfigurationOptions(server)
+
+	// Setup received mail handler
+	server.OnReceivedMail = HandleReceivedMail
+
+	// Setup auth handler
+	server.OnAuthRequest = HandleLocalAuthRequest
+
 	// Check for custom max size
 	maxsize, err := conf.QuerySingle("max_size 0")
 	if err == nil {
@@ -79,4 +88,26 @@ func main() {
 
 	// Start serving SMTP connections
 	assert(server.ListenAndServe())
+}
+
+func setServerConfigurationOptions(server *smtp.Server) {
+	domains, err := conf.Query("domain")
+	assert(err)
+	domainCount := len(domains)
+
+	// Warn if there are no domains configured
+	if domainCount < 1 {
+		//TODO Check for open relay
+		log.Println("[meirud] No domain configured! Ignore this warning if this is the wanted behavior (open relay)")
+		return
+	}
+
+	log.Printf("[meirud] Loaded %d domain(s)\r\n", domainCount)
+	server.LocalDomains = make([]string, domainCount)
+	for i, domainProperty := range domains {
+		if len(domainProperty.Values) < 1 {
+			log.Fatalln("Defined domain block without domain name in configuration!")
+		}
+		server.LocalDomains[i] = domainProperty.Values[0]
+	}
 }
