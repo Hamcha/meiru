@@ -219,7 +219,7 @@ func (c *serverClient) DoCommand(line string) bool {
 		}
 		// Trim whitespace around line and reject garbage
 		trimmed := strings.TrimSpace(line[10:])
-		if strings.IndexByte(trimmed, '>') < 0 {
+		if strings.IndexByte(trimmed, '>') > 0 && !strings.HasSuffix(trimmed, ">") {
 			c.reply(555, "Garbage not permitted")
 			break
 		}
@@ -239,8 +239,8 @@ func (c *serverClient) DoCommand(line string) bool {
 	// DATA: Receive mail data from client
 	case strings.HasPrefix(cmd, "DATA"):
 		// Reject if there isn't an active envelope
-		if len(c.currentEnvelope.Sender) < 1 {
-			c.reply(503, "No envelopes to add recipients to, please start one with MAIL FROM")
+		if len(c.currentEnvelope.Sender) < 1 || len(c.currentEnvelope.Recipients) < 1 {
+			c.reply(503, "Please specify both a sender and at least one recipient first")
 			break
 		}
 		c.reply(354, "Fire away! End with <CRLF>.<CRLF>")
