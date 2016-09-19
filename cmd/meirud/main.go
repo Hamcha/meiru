@@ -9,6 +9,7 @@ import (
 	"github.com/boltdb/bolt"
 
 	"github.com/hamcha/meiru/lib/config"
+	"github.com/hamcha/meiru/lib/imap"
 	"github.com/hamcha/meiru/lib/smtp"
 )
 
@@ -60,18 +61,30 @@ func main() {
 	bind, err := conf.QuerySingle("bind 0")
 	assertCfg(err, "bind <host/ip>[:port]")
 
+	_, smtpchan := startSMTPServer(bind, hostname)
+	_, imapchan := startIMAPServer(bind)
+
+	select {
+	case err = <-smtpchan:
+		panic(err)
+	case err = <-imapchan:
+		panic(err)
+	}
+}
+
+func startSMTPServer(bind, hostname string) (*smtp.Server, <-chan error) {
 	// Create SMTP server and start listening
-	server, err := smtp.NewServer(bind, hostname)
+	smtpd, err := smtp.NewServer(bind, hostname)
 	assert(err)
 
 	// Set configuration options to server options
-	setServerConfigurationOptions(server)
+	loadSMTPOptions(smtpd)
 
 	// Setup received mail handler
-	server.OnReceivedMail = HandleReceivedMail
+	smtpd.OnReceivedMail = HandleReceivedMail
 
 	// Setup auth handler
-	server.OnAuthRequest = HandleLocalAuthRequest
+	smtpd.OnAuthRequest = HandleLocalAuthRequest
 
 	// Check for custom max size
 	maxsize, err := conf.QuerySingle("max_size 0")
@@ -80,17 +93,28 @@ func main() {
 		if err != nil {
 			log.Fatalf("The value of 'max_size' (%s) was not recognized as a valid size\r\n", maxsize)
 		} else {
-			server.MaxSize = maxsizeInt
+			smtpd.MaxSize = maxsizeInt
 		}
 	}
 
 	log.Printf("[SMTPd] Listening on %s\r\n", bind)
 
 	// Start serving SMTP connections
-	assert(server.ListenAndServe())
+	return smtpd, runServer(smtpd.ListenAndServe)
 }
 
-func setServerConfigurationOptions(server *smtp.Server) {
+func startIMAPServer(bind string) (*imap.Server, <-chan error) {
+	// Create IMAP server and start listening
+	imapd, err := imap.NewServer(bind)
+	assert(err)
+
+	log.Printf("[IMAPd] Listening on %s\r\n", bind)
+
+	// Start serving IMAP connections
+	return imapd, runServer(imapd.ListenAndServe)
+}
+
+func loadSMTPOptions(smtpd *smtp.Server) {
 	domains, err := conf.Query("domain")
 	assert(err)
 	domainCount := len(domains)
@@ -102,12 +126,21 @@ func setServerConfigurationOptions(server *smtp.Server) {
 		return
 	}
 
-	log.Printf("[meirud] Loaded %d domain(s)\r\n", domainCount)
-	server.LocalDomains = make([]string, domainCount)
+	smtpd.LocalDomains = make([]string, domainCount)
 	for i, domainProperty := range domains {
 		if len(domainProperty.Values) < 1 {
 			log.Fatalln("Defined domain block without domain name in configuration!")
 		}
-		server.LocalDomains[i] = domainProperty.Values[0]
+		smtpd.LocalDomains[i] = domainProperty.Values[0]
 	}
+
+	log.Printf("[SMTPd] Loaded %d domain(s)\r\n", domainCount)
+}
+
+func runServer(fn func() error) <-chan error {
+	errch := make(chan error)
+	go func() {
+		errch <- fn()
+	}()
+	return errch
 }

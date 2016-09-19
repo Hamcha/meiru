@@ -164,7 +164,7 @@ func (c *serverClient) DoCommand(line string) bool {
 		c.greeted = true
 
 		// Reply with my hostname
-		clientHost, _, _ := net.SplitHostPort(c.socket.RemoteAddr().String())
+		clientHost, _, _ := net.SplitHostPort(c.SourceAddr.String())
 		hello := fmt.Sprintf("%s Hello %s [%s]! 😊", c.server.Hostname, c.Hostname, clientHost)
 
 		// Prepare extension list
