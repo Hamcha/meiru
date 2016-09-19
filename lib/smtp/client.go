@@ -46,9 +46,6 @@ func NewClient(host string) (*Client, error) {
 		reader: reader,
 	}
 
-	// Wait for greeting
-	_, err = client.getReplies()
-
 	return &client, err
 }
 
@@ -60,9 +57,19 @@ func (c *Client) Close() {
 
 func (c *Client) Greet(host string) error {
 	c.cmd("EHLO %s", host)
+
 	resp, err := c.getReplies()
 	if err != nil {
 		return err
+	}
+
+	// Check if it's the greeting
+	if resp[0].Code == 220 {
+		// Ignore and get next response
+		resp, err = c.getReplies()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Check if the greet was not successful
