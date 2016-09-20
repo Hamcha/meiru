@@ -9,9 +9,10 @@ import (
 	"strings"
 
 	"github.com/hamcha/meiru/lib/mailstore"
+	"github.com/hamcha/meiru/lib/utils"
 )
 
-type AuthRequestHandler func(ServerAuthRequest) bool
+type AuthRequestHandler func(user, pass string) bool
 
 type Server struct {
 	svsocket net.Listener
@@ -20,11 +21,6 @@ type Server struct {
 	Hostname string
 
 	OnAuthRequest AuthRequestHandler
-}
-
-type ServerAuthRequest struct {
-	Username string
-	Password string
 }
 
 type serverClient struct {
@@ -123,7 +119,22 @@ func (c *serverClient) DoCommand(line string) bool {
 
 	// LOGIN: Authenticate client
 	case strings.HasPrefix(cmd, "LOGIN"):
-		//TODO
+		parts, err := utils.SplitQuotes(line)
+		if err != nil {
+			c.reply(tag, "BAD Command is malformed!")
+			break
+		}
+		if len(parts) < 4 {
+			c.reply(tag, "BAD Command requires 2 parameters!")
+			break
+		}
+		c.authenticated = c.server.OnAuthRequest(parts[2], parts[3])
+		if c.authenticated {
+			c.authName = parts[2]
+			c.reply(tag, "OK Thanks for logging in!")
+		} else {
+			c.reply(tag, "NO Sorry, those credentials are incorrect!")
+		}
 
 	// LOGOUT: Close current connection with client
 	case strings.HasPrefix(cmd, "LOGOUT"):

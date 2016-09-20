@@ -114,6 +114,9 @@ func startIMAPServer(bind string, store *mailstore.MailStore) (*imap.Server, <-c
 	imapd, err := imap.NewServer(bind, store)
 	assert(err)
 
+	// Setup auth handler
+	imapd.OnAuthRequest = HandleLocalAuthRequest
+
 	log.Printf("[IMAPd] Listening on %s\r\n", bind)
 
 	// Start serving IMAP connections

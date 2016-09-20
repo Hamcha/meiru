@@ -19,7 +19,7 @@ var (
 )
 
 type ReceivedMailHandler func(e ServerEnvelope)
-type AuthRequestHandler func(ServerAuthRequest) bool
+type AuthRequestHandler func(user, pass string) bool
 
 type Server struct {
 	svsocket net.Listener
@@ -32,11 +32,6 @@ type Server struct {
 
 	OnAuthRequest  AuthRequestHandler
 	OnReceivedMail ReceivedMailHandler
-}
-
-type ServerAuthRequest struct {
-	Username string
-	Password string
 }
 
 type ServerEnvelope struct {
@@ -337,10 +332,7 @@ func (c *serverClient) DoCommand(line string) bool {
 				c.reply(501, "The PLAIN auth string is malformed")
 				break
 			}
-			c.authenticated = c.server.OnAuthRequest(ServerAuthRequest{
-				Username: user,
-				Password: pass,
-			})
+			c.authenticated = c.server.OnAuthRequest(user, pass)
 			if c.authenticated {
 				c.authName = user
 				c.reply(235, "You're authenticated!")

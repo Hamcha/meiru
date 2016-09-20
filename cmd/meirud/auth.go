@@ -4,18 +4,15 @@ import (
 	"fmt"
 
 	"github.com/hamcha/meiru/lib/email"
-	"github.com/hamcha/meiru/lib/smtp"
 )
 
-func HandleLocalAuthRequest(authRequest smtp.ServerAuthRequest) bool {
-	address := authRequest.Username
-
+func HandleLocalAuthRequest(username, password string) bool {
 	// Reject invalid addresses
-	if !email.IsValidAddress(address) {
+	if !email.IsValidAddress(username) {
 		return false
 	}
 
-	name, host := email.SplitAddress(address)
+	name, host := email.SplitAddress(username)
 	query := fmt.Sprintf("domain:0=%s user:0=%s password", host, name)
 
 	result, err := conf.Query(query)
@@ -23,5 +20,5 @@ func HandleLocalAuthRequest(authRequest smtp.ServerAuthRequest) bool {
 		return false
 	}
 
-	return checkPassword(result[0].Values, authRequest.Password)
+	return checkPassword(result[0].Values, password)
 }
