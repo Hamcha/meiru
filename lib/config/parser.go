@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"unicode"
+
+	"github.com/hamcha/meiru/lib/utils"
 )
 
 var (
@@ -64,32 +66,13 @@ func parseConfig(configfile string) (Block, error) {
 			scope = scope[:indent+1]
 		}
 
-		// Split line into parts
-		parts := strings.Split(trimline, " ")
-
-		// Merge parts contained within quotes
-		var atoms []string
-		for leftIndex := 0; leftIndex < len(parts); leftIndex++ {
-			if parts[leftIndex][0] != '"' {
-				atoms = append(atoms, parts[leftIndex])
-				continue
+		atoms, err := utils.SplitQuotes(trimline)
+		if err != nil {
+			if err == utils.ErrSplitUnmatchedQuote {
+				err = ParseErrorUnmatchedQuote
 			}
-
-			rightIndex := leftIndex
-			for ; ; rightIndex++ {
-				if rightIndex >= len(parts) {
-					return block, ParseErrorUnmatchedQuote
-				}
-				if parts[rightIndex][len(parts[rightIndex])-1] == '"' {
-					break
-				}
-			}
-
-			fullAtom := strings.Trim(strings.Join(parts[leftIndex:rightIndex+1], " "), "\"")
-			atoms = append(atoms, fullAtom)
-			leftIndex = rightIndex
+			return block, err
 		}
-
 		key := atoms[0]
 
 		// If we have values, add them
