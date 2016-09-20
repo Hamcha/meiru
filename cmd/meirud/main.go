@@ -10,6 +10,7 @@ import (
 
 	"github.com/hamcha/meiru/lib/config"
 	"github.com/hamcha/meiru/lib/imap"
+	"github.com/hamcha/meiru/lib/mailstore"
 	"github.com/hamcha/meiru/lib/smtp"
 )
 
@@ -61,8 +62,13 @@ func main() {
 	bind, err := conf.QuerySingle("bind 0")
 	assertCfg(err, "bind <host/ip>[:port]")
 
+	// Create mailstore for SMTP and IMAP servers
+
+	store := mailstore.NewStore(db)
+	store.LoadConfig(&conf)
+
 	_, smtpchan := startSMTPServer(bind, hostname)
-	_, imapchan := startIMAPServer(bind)
+	_, imapchan := startIMAPServer(bind, store)
 
 	select {
 	case err = <-smtpchan:
@@ -103,9 +109,9 @@ func startSMTPServer(bind, hostname string) (*smtp.Server, <-chan error) {
 	return smtpd, runServer(smtpd.ListenAndServe)
 }
 
-func startIMAPServer(bind string) (*imap.Server, <-chan error) {
+func startIMAPServer(bind string, store *mailstore.MailStore) (*imap.Server, <-chan error) {
 	// Create IMAP server and start listening
-	imapd, err := imap.NewServer(bind)
+	imapd, err := imap.NewServer(bind, store)
 	assert(err)
 
 	log.Printf("[IMAPd] Listening on %s\r\n", bind)

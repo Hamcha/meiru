@@ -7,12 +7,24 @@ import (
 	"log"
 	"net"
 	"strings"
+
+	"github.com/hamcha/meiru/lib/mailstore"
 )
+
+type AuthRequestHandler func(ServerAuthRequest) bool
 
 type Server struct {
 	svsocket net.Listener
+	store    *mailstore.MailStore
 
 	Hostname string
+
+	OnAuthRequest AuthRequestHandler
+}
+
+type ServerAuthRequest struct {
+	Username string
+	Password string
 }
 
 type serverClient struct {
@@ -23,7 +35,7 @@ type serverClient struct {
 	authName      string
 }
 
-func NewServer(bindAddr string) (*Server, error) {
+func NewServer(bindAddr string, store *mailstore.MailStore) (*Server, error) {
 	if strings.IndexRune(bindAddr, ':') < 0 {
 		bindAddr += ":143"
 	}
@@ -32,6 +44,7 @@ func NewServer(bindAddr string) (*Server, error) {
 
 	return &Server{
 		svsocket: serversock,
+		store:    store,
 	}, err
 }
 
