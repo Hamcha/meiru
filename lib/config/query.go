@@ -16,16 +16,24 @@ var (
 type QueryResult []Property
 
 func (cfg Config) Query(path string) (QueryResult, error) {
+	return cfg.QuerySub(path, cfg.Data)
+}
+
+func (cfg Config) QuerySub(path string, start Block) (QueryResult, error) {
 	parts := strings.Split(path, " ")
-	return queryPath(parts, cfg.Data)
+	return queryPath(parts, start)
 }
 
 func (cfg Config) QuerySingle(path string) (string, error) {
+	return cfg.QuerySingleSub(path, cfg.Data)
+}
+
+func (cfg Config) QuerySingleSub(path string, start Block) (string, error) {
 	// Separate between generic and specific part
 	sep := strings.LastIndexByte(path, ' ')
 
 	// Call query on generic path
-	results, err := cfg.Query(path[:sep])
+	results, err := cfg.QuerySub(path[:sep], start)
 	if err != nil {
 		return "", err
 	}
