@@ -97,6 +97,21 @@ func (c *serverClient) DoCommand(line string) bool {
 
 	switch {
 
+	// NOOP
+	case strings.HasPrefix(cmd, "NOOP"):
+		c.reply(tag, "OK ..well this was a waste of bandwidth.")
+
+	// CAPABILITY: List supported capabilities/extensions
+	case strings.HasPrefix(cmd, "CAPABILITY"):
+		c.replyMulti(tag, []string{
+			"CAPABILITY IMAP4rev1",
+			"OK It's not you, it's the mail server!",
+		})
+
+	// LOGIN: Authenticate client
+	case strings.HasPrefix(cmd, "LOGIN"):
+		//TODO
+
 	// LOGOUT: Close current connection with client
 	case strings.HasPrefix(cmd, "LOGOUT"):
 		c.reply("*", "BYE Have a nice day! 🎉")
