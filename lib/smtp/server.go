@@ -213,7 +213,7 @@ func (c *serverClient) DoCommand(line string) bool {
 		}
 
 		// Check if local address (require auth)
-		if c.isAddressInternal(addr.Address) && c.server.RequireAuth {
+		if c.IsAddressInternal(addr.Address) && c.server.RequireAuth {
 			// Check if client is authenticated
 			if !c.authenticated {
 				c.reply(530, "Emails from this domain require authentication. Please authenticate first!")
@@ -299,11 +299,19 @@ func (c *serverClient) DoCommand(line string) bool {
 		}
 
 		c.reply(354, "Fire away! End with <CRLF>.<CRLF>")
-		_, err := c.readDATA()
+		var err error
+		c.currentEnvelope.Data, err = c.readDATA()
 		if err != nil {
 			log.Printf("[SMTPd] Client read error: %s\r\n", err.Error())
 			return false
 		}
+		err = c.server.sendEnvelope(&c.currentEnvelope)
+		if err != nil {
+			log.Printf("[SMTPd] Error encountered processing envelope: %s\r\n", err.Error())
+			c.reply(501, "Encountered error while processing envelope: "+err.Error())
+			break
+		}
+		c.server.OnReceivedMail(c.currentEnvelope)
 		c.reply(250, "Your message is on its way! ✈")
 
 	// AUTH: Authenticate client
@@ -459,7 +467,7 @@ func (c *serverClient) readDATA() (string, error) {
 	return strings.TrimRight(data, "\r\n"), nil
 }
 
-func (c *serverClient) isAddressInternal(addr string) bool {
+func (c *serverClient) IsAddressInternal(addr string) bool {
 	atIndex := strings.LastIndexByte(addr, '@')
 	remoteDomain := strings.ToLower(addr[atIndex+1:])
 	for _, localDomain := range c.server.LocalDomains {
@@ -473,7 +481,7 @@ func (c *serverClient) isAddressInternal(addr string) bool {
 
 func (e *ServerEnvelope) isInternal() bool {
 	for _, recp := range e.Recipients {
-		if !e.Client.isAddressInternal(recp) {
+		if !e.Client.IsAddressInternal(recp) {
 			return false
 		}
 	}
