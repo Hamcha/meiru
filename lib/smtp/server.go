@@ -164,7 +164,7 @@ func (c *serverClient) DoCommand(line string) bool {
 
 		// Prepare extension list
 		maxsize := fmt.Sprintf("SIZE %d", c.server.MaxSize)
-		c.replyMulti(250, []string{hello, "PIPELINING", "SMTPUTF8", "AUTH PLAIN", maxsize})
+		c.replyMulti(250, []string{hello, "PIPELINING", "SMTPUTF8", "AUTH LOGIN PLAIN", maxsize})
 
 	// NOOP
 	case strings.HasPrefix(cmd, "NOOP"):
@@ -324,17 +324,47 @@ func (c *serverClient) DoCommand(line string) bool {
 			}
 			data, err := base64.StdEncoding.DecodeString(b64str)
 			if err != nil {
-				c.reply(501, "That doesn't look like Base64… 🤔")
+				c.reply(535, "That doesn't look like Base64… 🤔")
 				break
 			}
 			user, pass, err := decodePlainResponse(data)
 			if err != nil {
-				c.reply(501, "The PLAIN auth string is malformed")
+				c.reply(535, "The PLAIN auth string is malformed")
 				break
 			}
 			c.authenticated = c.server.OnAuthRequest(user, pass)
 			if c.authenticated {
 				c.authName = user
+				c.reply(235, "You're authenticated!")
+			} else {
+				c.reply(535, "Sorry, I cannot accept those credentials!")
+			}
+		case "LOGIN":
+			c.reply(334, "VXNlcm5hbWU6")
+			userb64, err := c.readLine()
+			if err != nil {
+				log.Printf("[SMTPd] Client read error: %s\r\n", err.Error())
+				return false
+			}
+			user, err := base64.StdEncoding.DecodeString(userb64)
+			if err != nil {
+				c.reply(535, "That doesn't look like Base64… 🤔")
+				break
+			}
+			c.reply(334, "UGFzc3dvcmQ6")
+			passb64, err := c.readLine()
+			if err != nil {
+				log.Printf("[SMTPd] Client read error: %s\r\n", err.Error())
+				return false
+			}
+			pass, err := base64.StdEncoding.DecodeString(passb64)
+			if err != nil {
+				c.reply(535, "That doesn't look like Base64… 🤔")
+				break
+			}
+			c.authenticated = c.server.OnAuthRequest(string(user), string(pass))
+			if c.authenticated {
+				c.authName = string(user)
 				c.reply(235, "You're authenticated!")
 			} else {
 				c.reply(535, "Sorry, I cannot accept those credentials!")
