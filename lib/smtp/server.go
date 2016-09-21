@@ -38,7 +38,7 @@ type ServerEnvelope struct {
 	Client     *serverClient
 	Sender     string
 	Recipients []string
-	Data       []byte
+	Data       string
 }
 
 type serverClient struct {
@@ -66,11 +66,11 @@ func NewServer(bindAddr string, hostname string) (*Server, error) {
 	serversock, err := net.Listen("tcp", bindAddr)
 
 	return &Server{
+		svsocket: serversock,
+
 		Hostname:    hostname,
 		MaxSize:     DefaultMaxSize,
 		RequireAuth: true,
-
-		svsocket: serversock,
 	}, err
 }
 
@@ -248,7 +248,13 @@ func (c *serverClient) DoCommand(line string) bool {
 			break
 		}
 		// Trim whitespace around line and reject garbage
-		trimmed := strings.TrimSpace(line[10:])
+		trimmed := strings.TrimSpace(line[8:])
+		if trimmed[0] == '<' && len(trimmed) > 1 {
+			trimmed = trimmed[1:]
+		} else {
+			c.reply(555, "Garbage not permitted")
+			break
+		}
 		if strings.IndexByte(trimmed, '>') > 0 && !strings.HasSuffix(trimmed, ">") {
 			c.reply(555, "Garbage not permitted")
 			break
