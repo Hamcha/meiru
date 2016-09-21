@@ -67,18 +67,21 @@ func main() {
 	store := mailstore.NewStore(db)
 	store.LoadConfig(&conf)
 
-	_, smtpchan := startSMTPServer(bind, hostname)
+	queue, queuechan := startSendQueue(db, hostname)
+	_, smtpchan := startSMTPServer(bind, hostname, queue)
 	_, imapchan := startIMAPServer(bind, store)
 
 	select {
 	case err = <-smtpchan:
-		panic(err)
+		assert(err)
 	case err = <-imapchan:
-		panic(err)
+		assert(err)
+	case err = <-queuechan:
+		assert(err)
 	}
 }
 
-func startSMTPServer(bind, hostname string) (*smtp.Server, <-chan error) {
+func startSMTPServer(bind, hostname string, queue *SendQueue) (*smtp.Server, <-chan error) {
 	// Create SMTP server and start listening
 	smtpd, err := smtp.NewServer(bind, hostname)
 	assert(err)
@@ -86,11 +89,11 @@ func startSMTPServer(bind, hostname string) (*smtp.Server, <-chan error) {
 	// Set configuration options to server options
 	loadSMTPOptions(smtpd)
 
-	// Setup received mail handler
-	smtpd.OnReceivedMail = HandleReceivedMail
-
 	// Setup auth handler
 	smtpd.OnAuthRequest = HandleLocalAuthRequest
+
+	// Setup sendmail handler
+	smtpd.OnReceivedMail = queue.QueueMail
 
 	// Check for custom max size
 	maxsize, err := conf.QuerySingle("max_size 0")
@@ -144,6 +147,11 @@ func loadSMTPOptions(smtpd *smtp.Server) {
 	}
 
 	log.Printf("[SMTPd] Loaded %d domain(s)\r\n", domainCount)
+}
+
+func startSendQueue(db *bolt.DB, hostname string) (*SendQueue, <-chan error) {
+	queue := NewSendQueue(db, hostname)
+	return queue, runServer(queue.Serve)
 }
 
 func runServer(fn func() error) <-chan error {
