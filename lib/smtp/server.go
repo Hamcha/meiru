@@ -305,12 +305,6 @@ func (c *serverClient) DoCommand(line string) bool {
 			log.Printf("[SMTPd] Client read error: %s\r\n", err.Error())
 			return false
 		}
-		err = c.server.sendEnvelope(&c.currentEnvelope)
-		if err != nil {
-			log.Printf("[SMTPd] Error encountered processing envelope: %s\r\n", err.Error())
-			c.reply(501, "Encountered error while processing envelope: "+err.Error())
-			break
-		}
 		c.server.OnReceivedMail(c.currentEnvelope)
 		c.reply(250, "Your message is on its way! ✈")
 
