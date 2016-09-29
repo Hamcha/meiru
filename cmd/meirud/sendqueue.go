@@ -47,12 +47,11 @@ func NewSendQueue(db *bolt.DB, hostname string) *SendQueue {
 }
 
 func (s *SendQueue) QueueMail(envelope smtp.ServerEnvelope) {
-	var inboundMails []sqInboundMailData
-	var outboundMails []sqOutboundMailData
+	var toSend []interface{}
 
 	for _, recipient := range envelope.Recipients {
 		if envelope.Client.IsAddressInternal(recipient) {
-			inboundMails = append(inboundMails, sqInboundMailData{
+			toSend = append(toSend, sqInboundMailData{
 				Sender:    envelope.Sender,
 				Recipient: recipient,
 				Data:      &envelope.Data,
@@ -63,7 +62,7 @@ func (s *SendQueue) QueueMail(envelope smtp.ServerEnvelope) {
 			if err != nil {
 				s.HandleDeliveryError(envelope.Sender, err)
 			}
-			outboundMails = append(outboundMails, sqOutboundMailData{
+			toSend = append(toSend, sqOutboundMailData{
 				Sender:       envelope.Sender,
 				Recipient:    recipient,
 				RemoteDomain: remoteServer,
@@ -73,13 +72,13 @@ func (s *SendQueue) QueueMail(envelope smtp.ServerEnvelope) {
 	}
 
 	go func() {
-		for _, mail := range inboundMails {
-			s.inbound <- mail
-		}
-	}()
-	go func() {
-		for _, mail := range outboundMails {
-			s.outbound <- mail
+		for _, mail := range toSend {
+			switch m := mail.(type) {
+			case sqInboundMailData:
+				s.inbound <- m
+			case sqOutboundMailData:
+				s.outbound <- m
+			}
 		}
 	}()
 }
