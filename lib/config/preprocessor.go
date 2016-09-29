@@ -1,16 +1,19 @@
 package config
 
 import (
-	"errors"
 	"path/filepath"
+
+	"github.com/hamcha/meiru/lib/errors"
 )
 
 type pScope map[string]string
 type pFunction func(scope pScope, prop Property) ([]Property, error)
 
 var (
-	PPErrorInexistantFunction = errors.New("preprocess cfg error: unknown preprocess directive")
-	PPErrorMissingParameter   = errors.New("preprocess cfg error: missing required parameter")
+	ErrSrcPreprocess errors.ErrorSource = "cfg preprocess"
+
+	PPErrorInexistantFunction = errors.NewType(ErrSrcPreprocess, "unknown preprocess directive")
+	PPErrorMissingParameter   = errors.NewType(ErrSrcPreprocess, "missing required parameter")
 )
 
 func processConfig(path string, block Block) (Block, error) {
@@ -26,7 +29,7 @@ func processConfig(path string, block Block) (Block, error) {
 			case "include":
 				function = pInclude
 			default:
-				return out, PPErrorInexistantFunction
+				return out, errors.NewError(PPErrorInexistantFunction).WithInfo("File <%s>", path)
 			}
 			result, err := function(scope, property)
 			if err != nil {
@@ -43,7 +46,7 @@ func processConfig(path string, block Block) (Block, error) {
 
 func pInclude(scope pScope, prop Property) ([]Property, error) {
 	if len(prop.Values) < 1 {
-		return nil, PPErrorMissingParameter
+		return nil, errors.NewError(PPErrorMissingParameter)
 	}
 
 	var props []Property

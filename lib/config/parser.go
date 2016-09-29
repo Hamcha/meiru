@@ -1,23 +1,25 @@
 package config
 
 import (
-	"errors"
 	"strings"
 	"unicode"
 
+	"github.com/hamcha/meiru/lib/errors"
 	"github.com/hamcha/meiru/lib/utils"
 )
 
 var (
-	ParseErrorIndentMismatch = errors.New("cfg parse error: indent mismatch")
-	ParseErrorUnmatchedQuote = errors.New("cfg parse error: missing ending quote")
+	ErrSrcParser errors.ErrorSource = "cfg parse"
+
+	ParseErrorIndentMismatch = errors.NewType(ErrSrcParser, "indent mismatch")
+	ParseErrorUnmatchedQuote = errors.NewType(ErrSrcParser, "missing ending quote")
 )
 
-func parseConfig(configfile string) (Block, error) {
+func parseConfig(path, configfile string) (Block, error) {
 	var block Block
 	lines := strings.Split(configfile, "\n")
 	scope := []*Block{&block}
-	for _, line := range lines {
+	for lineNumber, line := range lines {
 		// Remove comments (find # without preceding \)
 		linecopy := line
 		copyoffset := 0
@@ -58,7 +60,7 @@ func parseConfig(configfile string) (Block, error) {
 
 		// Check for indent mismatch
 		if indent >= len(scope) {
-			return block, ParseErrorIndentMismatch
+			return block, errors.NewError(ParseErrorIndentMismatch).WithInfo("File <%s> Line %d", path, lineNumber+1)
 		}
 
 		// To avoid scope issues, pop unused scope levels
@@ -69,7 +71,7 @@ func parseConfig(configfile string) (Block, error) {
 		atoms, err := utils.SplitQuotes(trimline)
 		if err != nil {
 			if err == utils.ErrSplitUnmatchedQuote {
-				err = ParseErrorUnmatchedQuote
+				err = errors.NewError(ParseErrorUnmatchedQuote).WithInfo("File <%s> Line %d", path, lineNumber+1)
 			}
 			return block, err
 		}

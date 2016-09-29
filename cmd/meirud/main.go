@@ -9,6 +9,7 @@ import (
 	"github.com/boltdb/bolt"
 
 	"github.com/hamcha/meiru/lib/config"
+	"github.com/hamcha/meiru/lib/errors"
 	"github.com/hamcha/meiru/lib/imap"
 	"github.com/hamcha/meiru/lib/mailstore"
 	"github.com/hamcha/meiru/lib/smtp"
@@ -16,18 +17,27 @@ import (
 
 var conf config.Config
 
-func assert(err error) {
-	if err != nil {
-		log.Fatalf("FATAL ERROR: %s\r\n", err.Error())
+func assert(err interface{}) {
+	switch e := err.(type) {
+	case *errors.Error:
+		if e != nil {
+			log.Fatalf("[%s] FATAL : %s\r\n", e.Type.Source, e.Error())
+		}
+	case error:
+		if e != nil {
+			log.Fatalf("[meirud] FATAL : %s\r\n", e.Error())
+		}
 	}
 }
 
-func assertCfg(err error, cfg string) {
-	if err == config.QueryErrSingleTooFewResults {
-		log.Fatalf("The configuration value '%s' is missing! Please add it to the configuration file!\r\n", cfg)
-	}
-	if err == config.QueryErrSingleTooFewValues {
-		log.Fatalf("The configuration value 'dbpath <path/to/db>' is declared without a value! Please add a path to the database file (will be created if missing).\r\n", cfg)
+func assertCfg(err *errors.Error, cfg string) {
+	if err != nil {
+		if err.Type == config.QueryErrSingleTooFewResults {
+			log.Fatalf("The configuration value '%s' is missing! Please add it to the configuration file!\r\n", cfg)
+		}
+		if err.Type == config.QueryErrSingleTooFewValues {
+			log.Fatalf("The configuration value 'dbpath <path/to/db>' is declared without a value! Please add a path to the database file (will be created if missing).\r\n", cfg)
+		}
 	}
 }
 
@@ -40,8 +50,8 @@ func main() {
 	conf, err = config.LoadConfig(*cfgpath)
 	assert(err)
 
-	dbpath, err := conf.QuerySingle("dbfile 0")
-	assertCfg(err, "dbfile </path/to/db>")
+	dbpath, cfgerr := conf.QuerySingle("dbfile 0")
+	assertCfg(cfgerr, "dbfile </path/to/db>")
 
 	db, err := bolt.Open(dbpath, 0600, &bolt.Options{Timeout: 10 * time.Second})
 	if err != nil {
@@ -56,11 +66,11 @@ func main() {
 
 	// Get required configuration values for the SMTP server
 
-	hostname, err := conf.QuerySingle("hostname 0")
-	assertCfg(err, "hostname <my.host.name>")
+	hostname, cfgerr := conf.QuerySingle("hostname 0")
+	assertCfg(cfgerr, "hostname <my.host.name>")
 
-	bind, err := conf.QuerySingle("bind 0")
-	assertCfg(err, "bind <host/ip>[:port]")
+	bind, cfgerr := conf.QuerySingle("bind 0")
+	assertCfg(cfgerr, "bind <host/ip>[:port]")
 
 	// Create mailstore for SMTP and IMAP servers
 

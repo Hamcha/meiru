@@ -1,18 +1,21 @@
 package main
 
 import (
-	"errors"
+	"log"
 	"net"
 
 	"github.com/boltdb/bolt"
 	"github.com/hamcha/meiru/lib/email"
+	"github.com/hamcha/meiru/lib/errors"
 	"github.com/hamcha/meiru/lib/smtp"
 )
 
 var (
-	ErrSQCannotResolveDomain      = errors.New("sendqueue err: Cannot resolve remote mail server")
-	ErrSQCannotConnectToRemote    = errors.New("sendqueue err: Cannot connect to remote mail server")
-	ErrSQCommunicationErrorRemote = errors.New("sendqueue err: Communication error while talking to remote mail server")
+	ErrSrcSendqueue errors.ErrorSource = "sendqueue"
+
+	ErrSQCannotResolveDomain      = errors.NewType(ErrSrcSendqueue, "Cannot resolve remote mail server")
+	ErrSQCannotConnectToRemote    = errors.NewType(ErrSrcSendqueue, "Cannot connect to remote mail server")
+	ErrSQCommunicationErrorRemote = errors.NewType(ErrSrcSendqueue, "Communication error while talking to remote mail server")
 )
 
 type SendQueue struct {
@@ -91,19 +94,19 @@ func (s *SendQueue) SaveIntenalMail(data sqInboundMailData) error {
 func (s *SendQueue) SendExternalMail(data sqOutboundMailData) error {
 	client, err := smtp.NewClient(data.RemoteDomain)
 	if err != nil {
-		return ErrSQCannotConnectToRemote
+		return errors.NewError(ErrSQCannotConnectToRemote).WithError(err)
 	}
 	if err = client.Greet(s.Hostname); err != nil {
-		return ErrSQCommunicationErrorRemote
+		return errors.NewError(ErrSQCommunicationErrorRemote).WithError(err)
 	}
 	if err = client.SetSender(data.Sender); err != nil {
-		return ErrSQCommunicationErrorRemote
+		return errors.NewError(ErrSQCommunicationErrorRemote).WithError(err)
 	}
 	if err = client.AddRecipient(data.Recipient); err != nil {
-		return ErrSQCommunicationErrorRemote
+		return errors.NewError(ErrSQCommunicationErrorRemote).WithError(err)
 	}
 	if err = client.SendData(*data.Data); err != nil {
-		return ErrSQCommunicationErrorRemote
+		return errors.NewError(ErrSQCommunicationErrorRemote).WithError(err)
 	}
 
 	client.Close()
@@ -127,17 +130,17 @@ func (s *SendQueue) Serve() (err error) {
 		case inboundMail := <-s.inbound:
 			err := s.SaveIntenalMail(inboundMail)
 			if err != nil {
+				log.Printf("Error while saving mail for %s: %s\n", inboundMail.Recipient, err.Error())
 				s.HandleDeliveryError(inboundMail.Sender, err)
 			}
 		case outboundMail := <-s.outbound:
 			err := s.SendExternalMail(outboundMail)
 			if err != nil {
+				log.Printf("Error while delivering mail to %s: %s\n", outboundMail.Recipient, err.Error())
 				s.HandleDeliveryError(outboundMail.Sender, err)
 			}
 		}
 	}
-
-	//return nil
 }
 
 func getRemoteServerAddr(host string) (string, error) {
@@ -147,7 +150,7 @@ func getRemoteServerAddr(host string) (string, error) {
 	}
 	//TODO Return array and order by preference
 	if len(mx) < 1 {
-		return "", ErrSQCannotResolveDomain
+		return "", errors.NewError(ErrSQCannotResolveDomain)
 	}
 	return mx[0].Host, nil
 }

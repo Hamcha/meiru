@@ -3,7 +3,6 @@ package smtp
 import (
 	"bufio"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -12,10 +11,13 @@ import (
 	"strings"
 
 	"github.com/hamcha/meiru/lib/email"
+	"github.com/hamcha/meiru/lib/errors"
 )
 
 var (
-	ServerErrExceededMaximumSize = errors.New("server err: Client exceeded data size limit")
+	ErrSrcServer errors.ErrorSource = "smtpd"
+
+	ServerErrExceededMaximumSize = errors.NewType(ErrSrcServer, "Client exceeded data size limit")
 )
 
 type ReceivedMailHandler func(e ServerEnvelope)
@@ -419,7 +421,7 @@ func (c *serverClient) readLine() (string, error) {
 		}
 		line += curline
 		if uint64(len(line)) > c.server.MaxSize {
-			err = ServerErrExceededMaximumSize
+			err = errors.NewError(ServerErrExceededMaximumSize)
 			break
 		}
 		if strings.HasSuffix(curline, "\r\n") {

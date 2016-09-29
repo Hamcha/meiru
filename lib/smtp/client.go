@@ -2,11 +2,12 @@ package smtp
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/hamcha/meiru/lib/errors"
 )
 
 type Client struct {
@@ -26,8 +27,11 @@ type ClientServerExt struct {
 }
 
 var (
-	ClientErrInvalidServerResponse = errors.New("smtp client err: invalid response from server")
-	ClientErrNoServerResponse      = errors.New("smtp client err: no response from server")
+	ErrSrcClient errors.ErrorSource = "smtpc"
+
+	ClientErrInvalidServerResponse = errors.NewType(ErrSrcClient, "invalid response from server")
+	ClientErrReceivedServerError   = errors.NewType(ErrSrcClient, "received error from server")
+	ClientErrNoServerResponse      = errors.NewType(ErrSrcClient, "no response from server")
 )
 
 func NewClient(host string) (*Client, error) {
@@ -129,7 +133,7 @@ func (c *Client) SendData(data string) error {
 	}
 
 	if resp[0].Code != 354 {
-		return errors.New("smtp client server error: " + strconv.Itoa(resp[0].Code) + " - " + resp[0].Text)
+		return errors.NewError(ClientErrReceivedServerError).WithInfo("Recv error: %d %s", resp[0].Code, resp[0].Text)
 	}
 
 	fmt.Fprintf(c.conn, "%s\r\n.\r\n", data)
@@ -143,7 +147,7 @@ func (c *Client) SendData(data string) error {
 
 func getResponseError(reply clientServerReply) error {
 	if reply.Code != 250 {
-		return errors.New("smtp client server error: " + strconv.Itoa(reply.Code) + " - " + reply.Text)
+		return errors.NewError(ClientErrReceivedServerError).WithInfo("Recv error: %d %s", reply.Code, reply.Text)
 	}
 	return nil
 }
@@ -170,7 +174,7 @@ func (c *Client) getReplies() ([]clientServerReply, error) {
 		tickSep := strings.IndexByte(str, '-')
 
 		if spaceSep < 0 && tickSep < 0 {
-			return replies, ClientErrInvalidServerResponse
+			return replies, errors.NewError(ClientErrInvalidServerResponse).WithInfo("Recv: %s", str)
 		}
 
 		// If separator is '-' other replies are available
@@ -184,7 +188,7 @@ func (c *Client) getReplies() ([]clientServerReply, error) {
 
 		code, err := strconv.Atoi(str[0:separatorIndex])
 		if err != nil {
-			return replies, ClientErrInvalidServerResponse
+			return replies, errors.NewError(ClientErrInvalidServerResponse).WithError(err)
 		}
 
 		replies = append(replies, clientServerReply{
@@ -195,7 +199,7 @@ func (c *Client) getReplies() ([]clientServerReply, error) {
 
 	// No response received?
 	if len(replies) == 0 {
-		return replies, ClientErrNoServerResponse
+		return replies, errors.NewError(ClientErrNoServerResponse)
 	}
 
 	return replies, nil

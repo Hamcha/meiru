@@ -44,7 +44,7 @@ func LoadConfig(path string) (Config, error) {
 		return cfg, err
 	}
 
-	cfg.Data, err = parseConfig(string(data))
+	cfg.Data, err = parseConfig(path, string(data))
 	if err != nil {
 		return cfg, err
 	}

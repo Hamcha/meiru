@@ -1,34 +1,37 @@
 package config
 
 import (
-	"errors"
 	"strconv"
 	"strings"
+
+	"github.com/hamcha/meiru/lib/errors"
 )
 
 var (
-	QueryErrInvalidParamConstraint = errors.New("query cfg error: invalid param constraint")
-	QueryErrSingleNonNumFilter     = errors.New("query cfg error: non numeric single filter")
-	QueryErrSingleTooFewResults    = errors.New("query cfg error: too few results")
-	QueryErrSingleTooFewValues     = errors.New("query cfg error: too few values")
+	ErrSrcQuery errors.ErrorSource = "query"
+
+	QueryErrInvalidParamConstraint = errors.NewType(ErrSrcQuery, "invalid param constraint")
+	QueryErrSingleNonNumFilter     = errors.NewType(ErrSrcQuery, "non numeric single filter")
+	QueryErrSingleTooFewResults    = errors.NewType(ErrSrcQuery, "too few results")
+	QueryErrSingleTooFewValues     = errors.NewType(ErrSrcQuery, "too few values")
 )
 
 type QueryResult []Property
 
-func (cfg Config) Query(path string) (QueryResult, error) {
+func (cfg Config) Query(path string) (QueryResult, *errors.Error) {
 	return cfg.QuerySub(path, cfg.Data)
 }
 
-func (cfg Config) QuerySub(path string, start Block) (QueryResult, error) {
+func (cfg Config) QuerySub(path string, start Block) (QueryResult, *errors.Error) {
 	parts := strings.Split(path, " ")
 	return queryPath(parts, start)
 }
 
-func (cfg Config) QuerySingle(path string) (string, error) {
+func (cfg Config) QuerySingle(path string) (string, *errors.Error) {
 	return cfg.QuerySingleSub(path, cfg.Data)
 }
 
-func (cfg Config) QuerySingleSub(path string, start Block) (string, error) {
+func (cfg Config) QuerySingleSub(path string, start Block) (string, *errors.Error) {
 	// Separate between generic and specific part
 	sep := strings.LastIndexByte(path, ' ')
 
@@ -47,19 +50,21 @@ func (cfg Config) QuerySingleSub(path string, start Block) (string, error) {
 	paramID := 0
 	if len(parts) == 1 {
 		// "n" will be the Nth value of the first result
+		var err error
 		paramID, err = strconv.Atoi(parts[0])
 		if err != nil {
-			return "", QueryErrSingleNonNumFilter
+			return "", errors.NewError(QueryErrSingleNonNumFilter).WithError(err)
 		}
 	} else {
 		// "n:m" will the be the Mth value of the Nth result
+		var err error
 		resultID, err = strconv.Atoi(parts[0])
 		if err != nil {
-			return "", QueryErrSingleNonNumFilter
+			return "", errors.NewError(QueryErrSingleNonNumFilter).WithError(err)
 		}
 		paramID, err = strconv.Atoi(parts[1])
 		if err != nil {
-			return "", QueryErrSingleNonNumFilter
+			return "", errors.NewError(QueryErrSingleNonNumFilter).WithError(err)
 		}
 	}
 
@@ -69,10 +74,10 @@ func (cfg Config) QuerySingleSub(path string, start Block) (string, error) {
 
 	// Check for out of bound errors
 	if resultID >= len(results) {
-		return "", QueryErrSingleTooFewResults
+		return "", errors.NewError(QueryErrSingleTooFewResults)
 	}
 	if paramID >= len(results[resultID].Values) {
-		return "", QueryErrSingleTooFewValues
+		return "", errors.NewError(QueryErrSingleTooFewValues)
 	}
 
 	return results[resultID].Values[paramID], nil
@@ -83,7 +88,7 @@ type constraint struct {
 	Value   string
 }
 
-func queryPath(path []string, block Block) ([]Property, error) {
+func queryPath(path []string, block Block) ([]Property, *errors.Error) {
 	var found []Property
 
 	if len(path) == 1 {
@@ -120,7 +125,7 @@ func queryPath(path []string, block Block) ([]Property, error) {
 	return found, nil
 }
 
-func getConstraintList(str string) ([]constraint, error) {
+func getConstraintList(str string) ([]constraint, *errors.Error) {
 	var list []constraint
 
 	// Add query constraint terminator if not present
@@ -160,7 +165,7 @@ func getConstraintList(str string) ([]constraint, error) {
 			// Get param id
 			num, err := strconv.Atoi(str[firstChar:i])
 			if err != nil {
-				return list, QueryErrInvalidParamConstraint
+				return list, errors.NewError(QueryErrInvalidParamConstraint).WithError(err)
 			}
 
 			currentConstraint.ParamID = num
@@ -172,14 +177,14 @@ func getConstraintList(str string) ([]constraint, error) {
 	return list, nil
 }
 
-func verifyConstraints(path string, property Property) (bool, error) {
+func verifyConstraints(path string, property Property) (bool, *errors.Error) {
 	parts := strings.SplitN(path, ":", 2)
 	pathname := parts[0]
 
 	// Parse constraints if any
 	var constraints []constraint
 	if len(parts) > 1 {
-		var err error
+		var err *errors.Error
 		constraints, err = getConstraintList(parts[1])
 		if err != nil {
 			return false, err
