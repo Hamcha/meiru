@@ -253,9 +253,7 @@ func (c *serverClient) DoCommand(line string) bool {
 		}
 		// Trim whitespace around line and reject garbage
 		trimmed := strings.TrimSpace(line[8:])
-		if trimmed[0] == '<' && len(trimmed) > 1 {
-			trimmed = trimmed[1:]
-		} else {
+		if len(trimmed) > 0 && trimmed[0] != '<' {
 			c.reply(555, "Garbage not permitted")
 			break
 		}
