@@ -21,11 +21,11 @@ func assert(err interface{}) {
 	switch e := err.(type) {
 	case *errors.Error:
 		if e != nil {
-			log.Fatalf("[%s] FATAL : %s\r\n", e.Type.Source, e.Error())
+			log.Fatalf("[%s] FATAL\n\t%s\r\n", e.Type.Source, e.Error())
 		}
 	case error:
 		if e != nil {
-			log.Fatalf("[meirud] FATAL : %s\r\n", e.Error())
+			log.Fatalf("[meirud] FATAL\n\t%s\r\n", e.Error())
 		}
 	}
 }

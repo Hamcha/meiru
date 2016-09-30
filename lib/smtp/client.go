@@ -84,7 +84,7 @@ func (c *Client) Greet(host string) error {
 		if err != nil {
 			return err
 		}
-		if err = getResponseError(resp[0]); err != nil {
+		if err = getResponseError(resp); err != nil {
 			return err
 		}
 	}
@@ -112,7 +112,7 @@ func (c *Client) SetSender(addr string) error {
 		return err
 	}
 
-	return getResponseError(resp[0])
+	return getResponseError(resp)
 }
 
 func (c *Client) AddRecipient(addr string) error {
@@ -122,7 +122,7 @@ func (c *Client) AddRecipient(addr string) error {
 		return err
 	}
 
-	return getResponseError(resp[0])
+	return getResponseError(resp)
 }
 
 func (c *Client) SendData(data string) error {
@@ -133,7 +133,11 @@ func (c *Client) SendData(data string) error {
 	}
 
 	if resp[0].Code != 354 {
-		return errors.NewError(ClientErrReceivedServerError).WithInfo("Recv error: %d %s", resp[0].Code, resp[0].Text)
+		err := errors.NewError(ClientErrReceivedServerError)
+		for i, line := range resp {
+			err = err.WithInfo("RECV line %d: %d %s", i, line.Code, line.Text)
+		}
+		return err
 	}
 
 	fmt.Fprintf(c.conn, "%s\r\n.\r\n", data)
@@ -142,12 +146,16 @@ func (c *Client) SendData(data string) error {
 		return err
 	}
 
-	return getResponseError(resp[0])
+	return getResponseError(resp)
 }
 
-func getResponseError(reply clientServerReply) error {
-	if reply.Code != 250 {
-		return errors.NewError(ClientErrReceivedServerError).WithInfo("Recv error: %d %s", reply.Code, reply.Text)
+func getResponseError(replies []clientServerReply) error {
+	if replies[0].Code != 250 {
+		err := errors.NewError(ClientErrReceivedServerError)
+		for i, line := range replies {
+			err = err.WithInfo("RECV line %d: %d %s", i, line.Code, line.Text)
+		}
+		return err
 	}
 	return nil
 }

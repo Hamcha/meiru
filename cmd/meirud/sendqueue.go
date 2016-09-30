@@ -130,13 +130,13 @@ func (s *SendQueue) Serve() (err error) {
 		case inboundMail := <-s.inbound:
 			err := s.SaveIntenalMail(inboundMail)
 			if err != nil {
-				log.Printf("Error while saving mail for %s: %s\n", inboundMail.Recipient, err.Error())
+				log.Printf("Error while saving mail for %s:\n\t%s\n", inboundMail.Recipient, err.Error())
 				s.HandleDeliveryError(inboundMail.Sender, err)
 			}
 		case outboundMail := <-s.outbound:
 			err := s.SendExternalMail(outboundMail)
 			if err != nil {
-				log.Printf("Error while delivering mail to %s: %s\n", outboundMail.Recipient, err.Error())
+				log.Printf("Error while delivering mail to %s:\n\t%s\n", outboundMail.Recipient, err.Error())
 				s.HandleDeliveryError(outboundMail.Sender, err)
 			}
 		}
