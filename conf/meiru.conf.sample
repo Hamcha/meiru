@@ -1,11 +1,13 @@
 hostname localhost
 
+#bind.smtp localhost:25
+#bind.imap localhost:143
 bind localhost
 
 dbfile /mail/meiru.db
 
 default:
-	box /mail/$domain/$user
+	box /mail/${domain}/${user}
 
 domain localhost:
 	user test:

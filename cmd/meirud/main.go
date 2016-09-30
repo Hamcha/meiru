@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -33,10 +34,10 @@ func assert(err interface{}) {
 func assertCfg(err *errors.Error, cfg string) {
 	if err != nil {
 		if err.Type == config.QueryErrSingleTooFewResults {
-			log.Fatalf("The configuration value '%s' is missing! Please add it to the configuration file!\r\n", cfg)
+			log.Fatalf("The required configuration value '%s' is missing! Please add it to the configuration file!\r\n", cfg)
 		}
 		if err.Type == config.QueryErrSingleTooFewValues {
-			log.Fatalf("The configuration value 'dbpath <path/to/db>' is declared without a value! Please add a path to the database file (will be created if missing).\r\n", cfg)
+			log.Fatalf("The configuration value '%s' is declared without a value! Please fix this issue before starting the server again.\r\n", cfg)
 		}
 	}
 }
@@ -69,8 +70,7 @@ func main() {
 	hostname, cfgerr := conf.QuerySingle("hostname 0")
 	assertCfg(cfgerr, "hostname <my.host.name>")
 
-	bind, cfgerr := conf.QuerySingle("bind 0")
-	assertCfg(cfgerr, "bind <host/ip>[:port]")
+	bindsmtp, bindimap := getBindConf()
 
 	// Create mailstore for SMTP and IMAP servers
 
@@ -78,8 +78,8 @@ func main() {
 	store.LoadConfig(&conf)
 
 	queue, queuechan := startSendQueue(db, hostname)
-	_, smtpchan := startSMTPServer(bind, hostname, queue)
-	_, imapchan := startIMAPServer(bind, store)
+	_, smtpchan := startSMTPServer(bindsmtp, hostname, queue)
+	_, imapchan := startIMAPServer(bindimap, store)
 
 	select {
 	case err = <-smtpchan:
@@ -116,7 +116,11 @@ func startSMTPServer(bind, hostname string, queue *SendQueue) (*smtp.Server, <-c
 		}
 	}
 
-	log.Printf("[SMTPd] Listening on %s\r\n", bind)
+	bindStr := bind
+	if strings.IndexRune(bindStr, ':') < 0 {
+		bindStr += ":25"
+	}
+	log.Printf("[SMTPd] Listening on %s\r\n", bindStr)
 
 	// Start serving SMTP connections
 	return smtpd, runServer(smtpd.ListenAndServe)
@@ -130,7 +134,11 @@ func startIMAPServer(bind string, store *mailstore.MailStore) (*imap.Server, <-c
 	// Setup auth handler
 	imapd.OnAuthRequest = HandleLocalAuthRequest
 
-	log.Printf("[IMAPd] Listening on %s\r\n", bind)
+	bindStr := bind
+	if strings.IndexRune(bindStr, ':') < 0 {
+		bindStr += ":143"
+	}
+	log.Printf("[IMAPd] Listening on %s\r\n", bindStr)
 
 	// Start serving IMAP connections
 	return imapd, runServer(imapd.ListenAndServe)
@@ -170,4 +178,40 @@ func runServer(fn func() error) <-chan error {
 		errch <- fn()
 	}()
 	return errch
+}
+
+func getBindConf() (string, string) {
+	bindsmtp, _ := conf.QuerySingle("bind.smtp 0")
+	bindimap, _ := conf.QuerySingle("bind.imap 0")
+
+	if bindsmtp == "" || bindimap == "" {
+		fback, err := conf.QuerySingle("bind 0")
+		if err != nil {
+			var missingProto []string
+			var missingBind []string
+			if bindsmtp == "" {
+				missingProto = append(missingProto, "SMTP")
+				missingBind = append(missingBind, "'bind.smtp <ip>[:port]'")
+			}
+			if bindimap == "" {
+				missingProto = append(missingProto, "IMAP")
+				missingBind = append(missingBind, "'bind.imap <ip>[:port]'")
+			}
+			missingProtoStr := strings.Join(missingProto, " and ")
+			missingBindStr := strings.Join(missingBind, ", ")
+			missingVerb := "is"
+			if len(missingProto) > 1 {
+				missingVerb = "are"
+			}
+			log.Fatalf("The bind parameters for %s %s missing, please specify either %s or a generic 'bind <ip>' for both (will use default ports) in the configuration file.\r\n", missingProtoStr, missingVerb, missingBindStr)
+		}
+		if bindsmtp == "" {
+			bindsmtp = fback
+		}
+		if bindimap == "" {
+			bindimap = fback
+		}
+	}
+
+	return bindsmtp, bindimap
 }
