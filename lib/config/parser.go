@@ -27,8 +27,10 @@ func parseConfig(path, configfile string) (Block, error) {
 			i := strings.IndexRune(linecopy, '#')
 			if i < 0 {
 				break
-			}
-			if i == 0 || linecopy[i-1] != '\\' {
+			} else if i == 0 {
+				line = ""
+				break
+			} else if linecopy[i-1] != '\\' {
 				line = line[0 : copyoffset+i-1]
 				break
 			}
