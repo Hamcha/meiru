@@ -201,16 +201,18 @@ func (c *serverClient) DoCommand(line string) bool {
 			c.reply(550, "No address specified")
 			break
 		}
-		// Trim whitespace around line and reject garbage
-		trimmed := strings.TrimSpace(line[10:])
-		if strings.IndexByte(trimmed, '>') < 0 {
-			c.reply(555, "Garbage not permitted")
+		// Get address and trim whitespace
+		addrlast := strings.LastIndexByte(line[10:], '>')
+		if addrlast < 0 {
+			c.reply(501, "The address you specified is malformed (missing \">\")")
 			break
 		}
+		trimmed := strings.TrimSpace(line[10 : 11+addrlast])
+
 		// Try to parse address
 		addr, err := mail.ParseAddress(trimmed)
 		if err != nil || !email.IsValidAddress(addr.Address) {
-			c.reply(501, "The address you specified is malformed")
+			c.reply(501, "The address you specified is malformed (cannot parse)")
 			break
 		}
 
@@ -257,14 +259,21 @@ func (c *serverClient) DoCommand(line string) bool {
 			c.reply(555, "Garbage not permitted")
 			break
 		}
-		if strings.IndexByte(trimmed, '>') > 0 && !strings.HasSuffix(trimmed, ">") {
+
+		if strings.LastIndexByte(trimmed, '>') < 0 {
+			c.reply(501, "The address you specified is malformed (missing \">\")")
+			break
+		}
+
+		if !strings.HasSuffix(trimmed, ">") {
 			c.reply(555, "Garbage not permitted")
 			break
 		}
+
 		// Try to parse address
 		addr, err := mail.ParseAddress(trimmed)
 		if err != nil || !email.IsValidAddress(addr.Address) {
-			c.reply(501, "The address you specified is malformed")
+			c.reply(501, "The address you specified is malformed (cannot parse)")
 			break
 		}
 
