@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/mail"
 	"strings"
+	"time"
 
 	"github.com/hamcha/meiru/lib/email"
 	"github.com/hamcha/meiru/lib/errors"
@@ -314,6 +315,8 @@ func (c *serverClient) DoCommand(line string) bool {
 			log.Printf("[SMTPd] Client read error: %s\r\n", err.Error())
 			return false
 		}
+		// Add metadata to envelope
+		c.currentEnvelope.AddEnvelopeMetadata()
 		c.server.OnReceivedMail(c.currentEnvelope)
 		c.reply(250, "Your message is on its way! ✈")
 
@@ -470,7 +473,7 @@ func (c *serverClient) readDATA() (string, error) {
 	return strings.TrimRight(data, "\r\n"), nil
 }
 
-func (c *serverClient) IsAddressInternal(addr string) bool {
+func (c serverClient) IsAddressInternal(addr string) bool {
 	atIndex := strings.LastIndexByte(addr, '@')
 	remoteDomain := strings.ToLower(addr[atIndex+1:])
 	for _, localDomain := range c.server.LocalDomains {
@@ -482,7 +485,21 @@ func (c *serverClient) IsAddressInternal(addr string) bool {
 	return false
 }
 
-func (e *ServerEnvelope) isInternal() bool {
+func (e *ServerEnvelope) AddEnvelopeMetadata() {
+	clientHost, _, _ := net.SplitHostPort(e.Client.SourceAddr.String())
+	Received := fmt.Sprintf(
+		"Received: from %s (%s) by %s with meiru-SMTPd;\n\t%s\n",
+		e.Client.Hostname,
+		clientHost,
+		e.Client.server.Hostname,
+		time.Now().Format(time.RFC1123Z))
+
+	ReturnPath := fmt.Sprintf("Return-Path: <%s>\n", e.Sender)
+
+	e.Data = Received + ReturnPath + e.Data
+}
+
+func (e ServerEnvelope) isInternal() bool {
 	for _, recp := range e.Recipients {
 		if !e.Client.IsAddressInternal(recp) {
 			return false
