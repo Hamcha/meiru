@@ -1,12 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 
-	"github.com/boltdb/bolt"
 	"github.com/hamcha/meiru/lib/email"
 	"github.com/hamcha/meiru/lib/errors"
+	"github.com/hamcha/meiru/lib/mailstore"
 	"github.com/hamcha/meiru/lib/smtp"
 )
 
@@ -19,9 +20,9 @@ var (
 )
 
 type SendQueue struct {
-	db       *bolt.DB
 	inbound  chan sqInboundMailData
 	outbound chan sqOutboundMailData
+	store    *mailstore.MailStore
 
 	Hostname string
 }
@@ -39,11 +40,11 @@ type sqOutboundMailData struct {
 	Data         *string
 }
 
-func NewSendQueue(db *bolt.DB, hostname string) *SendQueue {
+func NewSendQueue(hostname string, store *mailstore.MailStore) *SendQueue {
 	return &SendQueue{
-		db:       db,
 		inbound:  make(chan sqInboundMailData),
 		outbound: make(chan sqOutboundMailData),
+		store:    store,
 
 		Hostname: hostname,
 	}
@@ -87,8 +88,15 @@ func (s *SendQueue) QueueMail(envelope smtp.ServerEnvelope) {
 }
 
 func (s *SendQueue) SaveIntenalMail(data sqInboundMailData) error {
-	//TODO
-	return nil
+	// Add delivery metadata
+	DeliveredTo := fmt.Sprintf("Delivered-To: %s\n", data.Recipient)
+	msgdata := DeliveredTo + *data.Data
+
+	return s.store.Save(mailstore.InboundMailData{
+		Recipient:  data.Recipient,
+		RealSender: data.Sender,
+		MailData:   msgdata,
+	})
 }
 
 func (s *SendQueue) SendExternalMail(data sqOutboundMailData) error {

@@ -77,7 +77,7 @@ func main() {
 	store := mailstore.NewStore(db)
 	store.LoadConfig(&conf)
 
-	queue, queuechan := startSendQueue(db, hostname)
+	queue, queuechan := startSendQueue(hostname, store)
 	_, smtpchan := startSMTPServer(bindsmtp, hostname, queue)
 	_, imapchan := startIMAPServer(bindimap, store)
 
@@ -167,8 +167,8 @@ func loadSMTPOptions(smtpd *smtp.Server) {
 	log.Printf("[SMTPd] Loaded %d domain(s)\r\n", domainCount)
 }
 
-func startSendQueue(db *bolt.DB, hostname string) (*SendQueue, <-chan error) {
-	queue := NewSendQueue(db, hostname)
+func startSendQueue(hostname string, store *mailstore.MailStore) (*SendQueue, <-chan error) {
+	queue := NewSendQueue(hostname, store)
 	return queue, runServer(queue.Serve)
 }
 

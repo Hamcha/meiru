@@ -5,6 +5,11 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/hamcha/meiru/lib/config"
+	"github.com/hamcha/meiru/lib/errors"
+)
+
+var (
+	ErrSrcMailstore errors.ErrorSource = "mailstore"
 )
 
 type MailStore struct {
