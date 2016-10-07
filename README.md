@@ -14,13 +14,12 @@ Mail servers are a pain to setup. They do too much because they're meant to hand
 To keep meiru from becoming the next mail server behemoth (and to keep me sane), meiru will have the following limitations:
 
  - IMAP, SMTP and **nothing else**. No POP3, no SMAP, no antispam, no firewall, no antivirus..
- - Configuration files for configuration only, no DB backend for user credentials or other config parameters
+ - Configuration files only, no DB backend for user credentials or things like that
  - No support for relays
- - Only one database backend ([BoltDB](https://github.com/boltdb/bolt))
  - Protocol extensions (ESMTP, IMAP capabilities) will be implemented only when there is a strong argument for them<sup>1</sup>
  - Single node only (for now)
  - Simplicity over performance
- 
+
 <sup>
 1. Unless they take little to no extra work (ie. `SMTPUTF8`, `PIPELINING`)
 </sup>
@@ -29,7 +28,7 @@ Note that these limitations are not set in stone and may vary with time.
 
 ## Getting started
 
-**Meiru currently does not work**
+**meiru currently does not work**
 
 ### Requirements
 
@@ -41,8 +40,14 @@ Note that these limitations are not set in stone and may vary with time.
 
 Refer to the sample configuration in `conf/` on how to configure a simple system
 
+## License
+
+All of meiru source code is licensed under MIT
+
+The full text for the license can be found in the [LICENSE file](https://raw.githubusercontent.com/Hamcha/meiru/master/LICENSE) included with the source code
+
 ## Anime tax
 
-Meiru sounds like.. Meiru (Mayl) from Megaman Battle Network!
+meiru sounds like.. Meiru (Mayl) from Megaman Battle Network!
 
 ![Meiru](http://www.therockmanexezone.com/gallery/albums/userpics/10002/Meiru_OSSsitez.PNG)
