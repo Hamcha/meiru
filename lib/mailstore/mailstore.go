@@ -3,7 +3,6 @@ package mailstore
 import (
 	"log"
 
-	"github.com/boltdb/bolt"
 	"github.com/hamcha/meiru/lib/config"
 	"github.com/hamcha/meiru/lib/errors"
 )
@@ -13,8 +12,6 @@ var (
 )
 
 type MailStore struct {
-	db *bolt.DB
-
 	Domains map[string]Domain
 }
 
@@ -27,14 +24,14 @@ type User struct {
 	MailboxDir string
 }
 
-func NewStore(db *bolt.DB) *MailStore {
-	return &MailStore{
-		db:      db,
-		Domains: make(map[string]Domain),
-	}
+func NewStore() *MailStore {
+	return &MailStore{}
 }
 
 func (m *MailStore) LoadConfig(cfg *config.Config) error {
+	// Create/Reset domain map
+	m.Domains = make(map[string]Domain)
+
 	domainProps, err := cfg.Query("domain")
 	if err != nil {
 		return err

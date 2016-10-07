@@ -4,8 +4,6 @@ hostname localhost
 #bind.imap localhost:143
 bind localhost
 
-dbfile /mail/meiru.db
-
 default:
 	box /mail/${domain}/${user}
 

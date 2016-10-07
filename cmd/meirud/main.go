@@ -5,9 +5,6 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
-
-	"github.com/boltdb/bolt"
 
 	"github.com/hamcha/meiru/lib/config"
 	"github.com/hamcha/meiru/lib/errors"
@@ -51,15 +48,6 @@ func main() {
 	conf, err = config.LoadConfig(*cfgpath)
 	assert(err)
 
-	dbpath, cfgerr := conf.QuerySingle("dbfile 0")
-	assertCfg(cfgerr, "dbfile </path/to/db>")
-
-	db, err := bolt.Open(dbpath, 0600, &bolt.Options{Timeout: 10 * time.Second})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
 	if *dump {
 		conf.Dump(os.Stderr)
 		return
@@ -74,7 +62,7 @@ func main() {
 
 	// Create mailstore for SMTP and IMAP servers
 
-	store := mailstore.NewStore(db)
+	store := mailstore.NewStore()
 	store.LoadConfig(&conf)
 
 	queue, queuechan := startSendQueue(hostname, store)
